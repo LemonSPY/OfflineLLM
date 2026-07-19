@@ -1,7 +1,10 @@
 @echo off
 setlocal enabledelayedexpansion
 REM Builds native\llama.cpp with the Vulkan GPU backend and copies llama-server.exe
-REM (plus required DLLs) into src\OfflineLlm.App's output "engine" folder.
+REM (plus required DLLs) into src\OfflineLlm.App\Engine\ - a source-tracked (but
+REM gitignored-content) folder that OfflineLlm.App.csproj copies into the app's
+REM output/publish directory automatically, so this only needs to run once and
+REM every later `dotnet build`/`dotnet publish` just picks it up.
 REM
 REM The Vulkan backend is used (rather than Intel's SYCL/oneAPI backend) because it
 REM works on Intel Arc GPUs (and most other GPUs) without requiring the separate
@@ -27,7 +30,7 @@ if "%CONFIGURATION%"=="" set "CONFIGURATION=Release"
 set "REPO_ROOT=%~dp0.."
 set "LLAMA_DIR=%REPO_ROOT%\native\llama.cpp"
 set "BUILD_DIR=%LLAMA_DIR%\build-vulkan"
-set "ENGINE_OUT_DIR=%REPO_ROOT%\src\OfflineLlm.App\bin\%CONFIGURATION%\net8.0-windows10.0.19041.0\win-x64\engine"
+set "ENGINE_OUT_DIR=%REPO_ROOT%\src\OfflineLlm.App\Engine"
 
 if not exist "%LLAMA_DIR%" (
     echo ERROR: native\llama.cpp not found. Run "git submodule update --init --recursive" first.

@@ -15,8 +15,7 @@
     <SelfContained>true</SelfContained>
     <WindowsPackageType>None</WindowsPackageType>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
-    <!-- Add Assets\app.ico and uncomment once a real icon exists; see Assets/README.md -->
-    <!-- <ApplicationIcon>Assets\app.ico</ApplicationIcon> -->
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
@@ -27,6 +26,20 @@
 
   <ItemGroup>
     <ProjectReference Include="..\OfflineLlm.Core\OfflineLlm.Core.csproj" />
+  </ItemGroup>
+
+  <!--
+    Engine\ is populated by build\build-llama.cmd (llama-server.exe + its DLLs,
+    built with the Vulkan backend). Carrying it into engine\ under the output and
+    publish directories means AppPaths.LlamaServerExePath (which looks next to the
+    running exe) finds it with no extra copy step in setup.cmd/build-installer.cmd.
+  -->
+  <ItemGroup>
+    <None Include="Engine\**" Condition="Exists('Engine')">
+      <Link>Engine\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
   </ItemGroup>
 
 </Project>

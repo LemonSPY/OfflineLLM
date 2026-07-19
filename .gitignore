@@ -14,6 +14,11 @@ Generated Files/
 native/llama.cpp/build/
 native/llama.cpp/build-vulkan/
 
+# llama-server.exe + DLLs (built by build/build-llama.cmd, not committed - the
+# folder itself is tracked via .gitkeep so a fresh clone has somewhere to build into)
+src/OfflineLlm.App/Engine/*
+!src/OfflineLlm.App/Engine/.gitkeep
+
 # Repo-local portable dev toolchain (tools/setup-workspace.cmd downloads these -
 # never commit them, they're multi-hundred-MB and machine-specific)
 tools/dotnet/
