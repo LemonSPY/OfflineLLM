@@ -14,5 +14,5 @@ public static class AppPaths
     public static string ModelsDirectory => Path.Combine(BaseDirectory, "models");
 
     public static string LlamaServerExePath =>
-        Path.Combine(AppContext.BaseDirectory, "engine", "llama-server.exe");
+        Path.Combine(AppContext.BaseDirectory, "Engine", "llama-server.exe");
 }
