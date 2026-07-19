@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
+    <RootNamespace>OfflineLlm.App</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <UseWinUI>true</UseWinUI>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Platforms>x64</Platforms>
+    <!-- We provide our own Main (Program.cs) since the app is deployed unpackaged. -->
+    <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+    <SelfContained>true</SelfContained>
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <!-- Add Assets\app.ico and uncomment once a real icon exists; see Assets/README.md -->
+    <!-- <ApplicationIcon>Assets\app.ico</ApplicationIcon> -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.5.240627000" />
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.22621.3233" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.3.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OfflineLlm.Core\OfflineLlm.Core.csproj" />
+  </ItemGroup>
+
+</Project>

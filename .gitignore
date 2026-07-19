@@ -1,0 +1,35 @@
+# .NET / Visual Studio
+bin/
+obj/
+*.user
+.vs/
+*.suo
+
+# WinUI/MSIX packaging output
+AppPackages/
+BundleArtifacts/
+Generated Files/
+
+# Native build output
+native/llama.cpp/build/
+native/llama.cpp/build-vulkan/
+
+# WiX
+installer/bin/
+installer/obj/
+*.wixpdb
+
+# Models (large binaries, never commit)
+models/
+*.gguf
+
+# Local app data (chat DB, logs) if run from repo during dev
+*.db
+*.db-shm
+*.db-wal
+logs/
+
+# Misc
+*.log
+.DS_Store
+Thumbs.db
