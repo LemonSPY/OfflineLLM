@@ -65,6 +65,12 @@ This gets the actual property the user asked for — "close it and there's no tr
 
 Model choice is left to the user (swappable), not hardcoded. `ModelManager` scans a configurable models directory for `.gguf` files and lets the user pick which one `llama-server` loads. The picker surfaces file size so the user can judge fit against their GPU's 16GB budget (rule of thumb: pick a quantization whose file size is comfortably under the GPU memory budget, leaving room for KV-cache at the desired context length).
 
+`ModelCatalog` + `ModelDownloadService` add an in-app "Download models..." dialog: a short curated list of known-good instruction-tuned GGUF models (Qwen2.5 14B, Llama 3.1 8B, Mistral 7B, Phi-3.5 Mini) sized against a 16GB budget, or any direct `.gguf` URL the user pastes. Downloads stream straight into the models directory as `<name>.gguf.partial` and only get renamed to `<name>.gguf` once complete, so `ModelManager`'s `*.gguf` scan never picks up a truncated file from a cancelled or failed download.
+
+## Repo-local dev toolchain
+
+`tools/setup-workspace.cmd` provisions a portable, repo-scoped toolchain under `tools/` (gitignored) instead of requiring system-wide installs: a local .NET 8 SDK, CMake, `w64devkit` (portable GCC + Ninja + Make — this is what lets `build/build-llama.cmd` skip Visual Studio entirely and build llama.cpp with GCC/MinGW instead), a locally-scoped Vulkan SDK install, and the WiX v4 CLI as a local dotnet tool. `tools/workspace-env.cmd` puts whichever of these exist onto PATH for the duration of a build script; if `tools/` hasn't been set up, the build scripts fall back to whatever's already installed system-wide (a full Visual Studio, a system .NET SDK, etc.).
+
 ## Installer
 
 WiX Toolset v4 produces an MSI that:

@@ -57,6 +57,7 @@
                           SelectedItem="{x:Bind ViewModel.SelectedModel, Mode=TwoWay}"
                           DisplayMemberPath="DisplayName"
                           PlaceholderText="Select a model" />
+                <Button Content="Download models..." Click="OnDownloadModelsClick" />
             </StackPanel>
 
             <ListView Grid.Row="1" x:Name="MessagesList"

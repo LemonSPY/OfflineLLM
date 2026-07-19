@@ -18,6 +18,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
 {
     private readonly SqliteChatStore _chatStore = new(AppPaths.ChatDatabasePath);
     private readonly ModelManager _modelManager = new(AppPaths.ModelsDirectory);
+    private readonly ModelDownloadService _modelDownloadService = new(AppPaths.ModelsDirectory);
 
     private LlamaServerProcess? _sharedSavedServer;
     private SavedSessionEngine? _savedEngine;
@@ -26,6 +27,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
     public ObservableCollection<ChatSessionSummary> SavedSessions { get; } = new();
     public ObservableCollection<ChatMessage> CurrentMessages { get; } = new();
     public ObservableCollection<ModelInfo> AvailableModels { get; } = new();
+    public IReadOnlyList<ModelCatalogEntry> DownloadableModels { get; } = ModelCatalog.Curated;
 
     [ObservableProperty]
     private ModelInfo? _selectedModel;
@@ -35,6 +37,15 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
 
     [ObservableProperty]
     private bool _showArchived;
+
+    [ObservableProperty]
+    private bool _isDownloading;
+
+    [ObservableProperty]
+    private double _downloadFraction;
+
+    [ObservableProperty]
+    private string _downloadStatusText = string.Empty;
 
     private Guid? _activeSavedSessionId;
 
@@ -47,9 +58,46 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
 
     public MainViewModel()
     {
+        RefreshAvailableModels();
+    }
+
+    public void RefreshAvailableModels()
+    {
+        AvailableModels.Clear();
         foreach (var model in _modelManager.ListAvailableModels())
         {
             AvailableModels.Add(model);
+        }
+    }
+
+    /// <summary>
+    /// Downloads a catalog entry (or any direct .gguf URL, if the user pastes one
+    /// instead of picking a catalog entry) into the models folder ModelManager
+    /// scans, then refreshes the model picker so it shows up immediately.
+    /// </summary>
+    public async Task DownloadModelAsync(string sourceUrl, string fileName, CancellationToken ct = default)
+    {
+        IsDownloading = true;
+        DownloadFraction = 0;
+        DownloadStatusText = $"Starting download of {fileName}...";
+
+        try
+        {
+            var progress = new Progress<DownloadProgressInfo>(p =>
+            {
+                DownloadFraction = p.FractionComplete ?? 0;
+                DownloadStatusText = p.TotalBytes is long total
+                    ? $"{p.BytesReceived / 1024.0 / 1024.0:F0} MB / {total / 1024.0 / 1024.0:F0} MB"
+                    : $"{p.BytesReceived / 1024.0 / 1024.0:F0} MB downloaded";
+            });
+
+            await _modelDownloadService.DownloadAsync(sourceUrl, fileName, progress, ct);
+            DownloadStatusText = "Done.";
+            RefreshAvailableModels();
+        }
+        finally
+        {
+            IsDownloading = false;
         }
     }
 

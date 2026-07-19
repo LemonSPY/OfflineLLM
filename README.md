@@ -18,12 +18,15 @@ Layers:
 - **`src/OfflineLlm.App`** — WinUI 3 desktop app: chat UI, mode switcher, model picker, saved-chat list with archive/delete.
 - **`installer/`** — WiX Toolset installer producing an MSI that installs the app, adds a Start Menu entry, and creates a desktop shortcut.
 
+In the app, click **Download models...** to pull a `.gguf` file straight from Hugging Face (a small curated list is built in, or paste any direct `.gguf` URL) — no manual file wrangling required.
+
 ## Repo layout
 
 ```
 native/llama.cpp/           git submodule, vendored inference engine
+tools/                       one-time setup script + repo-local portable toolchain (gitignored)
 build/                      scripts to build llama.cpp with the Vulkan backend
-src/OfflineLlm.Core/        chat storage, process management, offline session engine
+src/OfflineLlm.Core/        chat storage, process management, offline session engine, model downloads
 src/OfflineLlm.App/         WinUI 3 desktop application
 installer/                  WiX installer project
 docs/                       architecture notes
@@ -31,20 +34,27 @@ docs/                       architecture notes
 
 ## Building
 
-Requires:
-
-- .NET 8 SDK with the Windows App SDK / WinUI 3 workload
-- Visual Studio 2022 (or Build Tools) with the "Desktop development with C++" workload, for building llama.cpp
-- CMake and a Vulkan SDK, for building llama.cpp with the Vulkan backend
-- WiX Toolset v4, for building the installer
+You do **not** need to install Visual Studio, a system-wide .NET SDK, CMake, or the Vulkan SDK. One script provisions a portable, repo-local copy of everything needed, entirely inside `tools\` (nothing touches Program Files, PATH, or the registry):
 
 ```cmd
-git submodule update --init --recursive
+git clone --recurse-submodules <this repo>
+cd OFFLINELLM
+tools\setup-workspace.cmd         REM one-time, downloads ~1-1.5GB into tools\
 build\build-llama.cmd             REM builds native/llama.cpp with the Vulkan backend
-dotnet build src\OfflineLlm.sln
-installer\build-installer.cmd     REM produces installer\bin\OfflineLlm-Setup.msi
+installer\build-installer.cmd     REM publishes the app + produces installer\bin\OfflineLlm-Setup.msi
 ```
 
-These are plain `.cmd` batch files (not PowerShell scripts) specifically so they run from `cmd.exe` or PowerShell without hitting PowerShell's script execution policy.
+Run `installer\bin\OfflineLlm-Setup.msi` and it installs the app under `%LocalAppData%\OfflineLlm`, with a Start Menu entry and a Desktop shortcut. Everything is a plain `.cmd` batch file (never PowerShell), so nothing hits PowerShell's script execution policy.
 
-None of this has been compiled yet in this environment (no .NET SDK / CMake / Visual Studio available here) — build and smoke-test on a Windows dev machine with the above prerequisites before relying on it.
+`tools\setup-workspace.cmd` installs (all repo-local, under `tools\`):
+
+- **.NET 8 SDK** — to build the WinUI 3 app
+- **CMake** + **w64devkit** (a portable GCC + Ninja + Make toolchain) — to build llama.cpp *without* needing Visual Studio at all
+- **Vulkan SDK** — headers + shader compiler needed to build llama.cpp's Vulkan backend (end users don't need this installed — the Vulkan *runtime* they need already ships with their GPU driver)
+- **WiX v4 CLI** — as a local dotnet tool, to build the MSI
+
+If you'd rather use tools you already have installed system-wide (a full Visual Studio, a system .NET SDK, etc.), the build scripts fall back to whatever's on PATH when `tools\` isn't present — skip `setup-workspace.cmd` in that case.
+
+Prefer to build with Visual Studio and the standard Vulkan SDK installer instead of the portable toolchain? That still works — just install .NET 8 SDK + Windows App SDK workload, Visual Studio 2022 (C++ workload), CMake, and the Vulkan SDK yourself, then run `build\build-llama.cmd` / `installer\build-installer.cmd` as above; they'll detect there's no `tools\` toolchain and use your system installs.
+
+None of this has been compiled yet — these scripts are written and ready to run but haven't been executed end-to-end. Building and smoke-testing is the next step.

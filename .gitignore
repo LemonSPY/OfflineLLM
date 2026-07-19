@@ -14,6 +14,17 @@ Generated Files/
 native/llama.cpp/build/
 native/llama.cpp/build-vulkan/
 
+# Repo-local portable dev toolchain (tools/setup-workspace.cmd downloads these -
+# never commit them, they're multi-hundred-MB and machine-specific)
+tools/dotnet/
+tools/cmake/
+tools/w64devkit/
+tools/VulkanSDK/
+tools/_downloads/
+
+# Installer publish staging
+installer/publish/
+
 # WiX
 installer/bin/
 installer/obj/

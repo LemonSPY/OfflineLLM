@@ -7,11 +7,16 @@ REM The Vulkan backend is used (rather than Intel's SYCL/oneAPI backend) because
 REM works on Intel Arc GPUs (and most other GPUs) without requiring the separate
 REM Intel oneAPI Base Toolkit install.
 REM
-REM PREREQUISITES
-REM   - Visual Studio 2022 (or Build Tools) with "Desktop development with C++"
-REM   - CMake >= 3.21 on PATH
-REM   - Vulkan SDK (https://vulkan.lunarg.com/) with VULKAN_SDK environment variable set
-REM   - git submodule already initialized: git submodule update --init --recursive
+REM By default this uses the repo-local portable toolchain from
+REM tools\setup-workspace.cmd (w64devkit's GCC + Ninja + the local Vulkan SDK) so
+REM no Visual Studio install is required. If tools\ hasn't been set up, it falls
+REM back to whatever CMake/Vulkan SDK/Visual Studio is already on your system.
+REM
+REM PREREQUISITES (pick one)
+REM   A) run tools\setup-workspace.cmd once (recommended - no other installs needed)
+REM   B) have CMake, the Vulkan SDK, and Visual Studio 2022 (C++ workload) on PATH
+REM
+REM   Either way: git submodule update --init --recursive must have been run first.
 REM
 REM USAGE
 REM   build-llama.cmd [Release|Debug]
@@ -29,13 +34,32 @@ if not exist "%LLAMA_DIR%" (
     exit /b 1
 )
 
+call "%REPO_ROOT%\tools\workspace-env.cmd"
+
+set "USE_LOCAL_TOOLCHAIN=0"
+if exist "%REPO_ROOT%\tools\w64devkit\bin\gcc.exe" if exist "%REPO_ROOT%\tools\w64devkit\bin\ninja.exe" (
+    set "USE_LOCAL_TOOLCHAIN=1"
+)
+
 if "%VULKAN_SDK%"=="" (
-    echo ERROR: VULKAN_SDK environment variable not set. Install the Vulkan SDK from https://vulkan.lunarg.com/ first.
+    echo ERROR: VULKAN_SDK not set. Run tools\setup-workspace.cmd, or install the
+    echo        Vulkan SDK from https://vulkan.lunarg.com/ and set VULKAN_SDK yourself.
     exit /b 1
 )
 
-echo Configuring llama.cpp with the Vulkan backend...
-cmake -S "%LLAMA_DIR%" -B "%BUILD_DIR%" -G "Visual Studio 17 2022" -A x64 -DGGML_VULKAN=ON -DLLAMA_CURL=OFF -DCMAKE_BUILD_TYPE=%CONFIGURATION%
+if "%USE_LOCAL_TOOLCHAIN%"=="1" (
+    echo Configuring llama.cpp with the Vulkan backend using the local w64devkit/Ninja toolchain...
+    set "BUILT_EXE_DIR=%BUILD_DIR%\bin"
+    cmake -S "%LLAMA_DIR%" -B "%BUILD_DIR%" -G "Ninja" ^
+        -DCMAKE_C_COMPILER="%REPO_ROOT%\tools\w64devkit\bin\gcc.exe" ^
+        -DCMAKE_CXX_COMPILER="%REPO_ROOT%\tools\w64devkit\bin\g++.exe" ^
+        -DGGML_VULKAN=ON -DLLAMA_CURL=OFF -DCMAKE_BUILD_TYPE=%CONFIGURATION%
+) else (
+    echo Configuring llama.cpp with the Vulkan backend using Visual Studio...
+    set "BUILT_EXE_DIR=%BUILD_DIR%\bin\%CONFIGURATION%"
+    cmake -S "%LLAMA_DIR%" -B "%BUILD_DIR%" -G "Visual Studio 17 2022" -A x64 ^
+        -DGGML_VULKAN=ON -DLLAMA_CURL=OFF -DCMAKE_BUILD_TYPE=%CONFIGURATION%
+)
 if errorlevel 1 (
     echo ERROR: cmake configure failed.
     exit /b 1
@@ -48,7 +72,6 @@ if errorlevel 1 (
     exit /b 1
 )
 
-set "BUILT_EXE_DIR=%BUILD_DIR%\bin\%CONFIGURATION%"
 if not exist "%BUILT_EXE_DIR%\llama-server.exe" (
     echo ERROR: Build did not produce llama-server.exe at %BUILT_EXE_DIR%
     exit /b 1

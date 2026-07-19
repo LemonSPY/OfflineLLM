@@ -17,6 +17,12 @@ public sealed partial class MainWindow : Window
         _ = ViewModel.RefreshSavedSessionsAsync();
     }
 
+    private async void OnDownloadModelsClick(object sender, RoutedEventArgs e)
+    {
+        var dialog = new DownloadModelsDialog(ViewModel) { XamlRoot = Content.XamlRoot };
+        await dialog.ShowAsync();
+    }
+
     private async void OnNewSavedChatClick(object sender, RoutedEventArgs e)
     {
         try
