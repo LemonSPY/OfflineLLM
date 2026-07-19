@@ -26,8 +26,14 @@ if exist "%TOOLS_DIR%\w64devkit\bin\gcc.exe" (
     set "PATH=%TOOLS_DIR%\w64devkit\bin;%PATH%"
 )
 
-if exist "%TOOLS_DIR%\VulkanSDK" (
-    for /d %%D in ("%TOOLS_DIR%\VulkanSDK\*") do set "VULKAN_SDK=%%D"
+REM Our install used --root pointed straight at tools\VulkanSDK, so files land
+REM flat there (Include\, Lib\, Bin\) rather than nested under a version folder
+REM the way a system-wide install nests under e.g. C:\VulkanSDK\1.4.x.x\.
+if exist "%TOOLS_DIR%\VulkanSDK\Include\vulkan\vulkan.h" (
+    set "VULKAN_SDK=%TOOLS_DIR%\VulkanSDK"
+    set "PATH=%TOOLS_DIR%\VulkanSDK\Bin;%PATH%"
+) else if exist "%TOOLS_DIR%\VulkanSDK" (
+    for /d %%D in ("%TOOLS_DIR%\VulkanSDK\*") do if exist "%%D\Include\vulkan\vulkan.h" set "VULKAN_SDK=%%D"
     if defined VULKAN_SDK set "PATH=%VULKAN_SDK%\Bin;%PATH%"
 )
 

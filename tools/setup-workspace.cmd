@@ -85,16 +85,27 @@ if exist "%TOOLS_DIR%\w64devkit\bin\gcc.exe" (
     echo [w64devkit] already present, skipping.
 ) else (
     echo [w64devkit] downloading portable GCC toolchain...
-    curl -L --fail -o "%DOWNLOAD_DIR%\w64devkit.zip" "https://github.com/skeeto/w64devkit/releases/download/v2.0.0/w64devkit-2.0.0.zip"
+    REM Current releases ship as a self-extracting 7z .exe (older releases were
+    REM plain .zip files - if this 404s, check
+    REM https://github.com/skeeto/w64devkit/releases/latest for the current asset name).
+    curl -L --fail -o "%DOWNLOAD_DIR%\w64devkit.7z.exe" "https://github.com/skeeto/w64devkit/releases/download/v2.8.0/w64devkit-x64-2.8.0.7z.exe"
     if errorlevel 1 (
         echo ERROR: failed to download w64devkit.
         exit /b 1
     )
     echo [w64devkit] extracting...
-    tar -xf "%DOWNLOAD_DIR%\w64devkit.zip" -C "%DOWNLOAD_DIR%"
-    move /y "%DOWNLOAD_DIR%\w64devkit" "%TOOLS_DIR%\w64devkit" >nul
+    if exist "%DOWNLOAD_DIR%\w64devkit-extract" rmdir /s /q "%DOWNLOAD_DIR%\w64devkit-extract"
+    "%DOWNLOAD_DIR%\w64devkit.7z.exe" -y -o"%DOWNLOAD_DIR%\w64devkit-extract" >nul
     if errorlevel 1 (
         echo ERROR: failed to extract w64devkit.
+        exit /b 1
+    )
+    if exist "%DOWNLOAD_DIR%\w64devkit-extract\bin\gcc.exe" (
+        move /y "%DOWNLOAD_DIR%\w64devkit-extract" "%TOOLS_DIR%\w64devkit" >nul
+    ) else if exist "%DOWNLOAD_DIR%\w64devkit-extract\w64devkit\bin\gcc.exe" (
+        move /y "%DOWNLOAD_DIR%\w64devkit-extract\w64devkit" "%TOOLS_DIR%\w64devkit" >nul
+    ) else (
+        echo ERROR: extracted w64devkit but could not find bin\gcc.exe in the expected location.
         exit /b 1
     )
 )
@@ -102,7 +113,14 @@ if exist "%TOOLS_DIR%\w64devkit\bin\gcc.exe" (
 REM ---------------------------------------------------------------
 REM Vulkan SDK - installed silently, contained to tools\VulkanSDK
 REM ---------------------------------------------------------------
-if exist "%TOOLS_DIR%\VulkanSDK" (
+REM The official installer's "SDK Core" component unconditionally requires
+REM administrator rights for one of its install actions, even with --root
+REM pointed at a non-system folder - there's no CLI switch to skip it (verified
+REM against its --help output and by trying --nf/--no-force-installations).
+REM Everything else in this script runs unelevated; only this one step asks
+REM Windows to elevate, which means a UAC prompt appears once and needs a
+REM human to click "Yes" - it cannot be scripted around.
+if exist "%TOOLS_DIR%\VulkanSDK\Include\vulkan\vulkan.h" (
     echo [vulkan] already present, skipping.
 ) else (
     echo [vulkan] downloading Vulkan SDK installer...
@@ -111,10 +129,21 @@ if exist "%TOOLS_DIR%\VulkanSDK" (
         echo ERROR: failed to download the Vulkan SDK installer.
         exit /b 1
     )
-    echo [vulkan] installing silently into %TOOLS_DIR%\VulkanSDK ...
-    "%DOWNLOAD_DIR%\vulkan-sdk.exe" --root "%TOOLS_DIR%\VulkanSDK" --accept-licenses --default-answer --confirm-command install
+
+    net session >nul 2>&1
     if errorlevel 1 (
-        echo ERROR: Vulkan SDK install failed.
+        echo [vulkan] this step requires one-time administrator approval - a UAC
+        echo          prompt will appear now. Please click "Yes".
+        powershell -NoProfile -NonInteractive -Command ^
+            "Start-Process -FilePath '%DOWNLOAD_DIR%\vulkan-sdk.exe' -ArgumentList '--root','%TOOLS_DIR%\VulkanSDK','--accept-licenses','--default-answer','--confirm-command','install' -Verb RunAs -Wait"
+    ) else (
+        echo [vulkan] installing silently into %TOOLS_DIR%\VulkanSDK ...
+        "%DOWNLOAD_DIR%\vulkan-sdk.exe" --root "%TOOLS_DIR%\VulkanSDK" --accept-licenses --default-answer --confirm-command install
+    )
+
+    if not exist "%TOOLS_DIR%\VulkanSDK\Include\vulkan\vulkan.h" (
+        echo ERROR: Vulkan SDK install did not produce Include\vulkan\vulkan.h - it
+        echo        may have failed or been cancelled at the UAC prompt.
         exit /b 1
     )
 )
