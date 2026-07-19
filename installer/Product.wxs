@@ -16,7 +16,7 @@
       $(var.AppPublishDir) : output of `dotnet publish` for OfflineLlm.App
                               (self-contained, includes engine\llama-server.exe + DLLs)
       $(var.AppIcon)        : path to src/OfflineLlm.App/Assets/app.ico
-      Both are passed in via -d on the wix build command line (see build-installer.ps1).
+      Both are passed in via -d on the wix build command line (see build-installer.cmd).
     -->
 
     <StandardDirectory Id="ProgramFiles64Folder">

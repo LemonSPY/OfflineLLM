@@ -38,11 +38,13 @@ Requires:
 - CMake and a Vulkan SDK, for building llama.cpp with the Vulkan backend
 - WiX Toolset v4, for building the installer
 
-```powershell
+```cmd
 git submodule update --init --recursive
-./build/build-llama.ps1          # builds native/llama.cpp with the Vulkan backend
-dotnet build src/OfflineLlm.sln
-./installer/build-installer.ps1  # produces installer/bin/OfflineLlm-Setup.msi
+build\build-llama.cmd             REM builds native/llama.cpp with the Vulkan backend
+dotnet build src\OfflineLlm.sln
+installer\build-installer.cmd     REM produces installer\bin\OfflineLlm-Setup.msi
 ```
+
+These are plain `.cmd` batch files (not PowerShell scripts) specifically so they run from `cmd.exe` or PowerShell without hitting PowerShell's script execution policy.
 
 None of this has been compiled yet in this environment (no .NET SDK / CMake / Visual Studio available here) — build and smoke-test on a Windows dev machine with the above prerequisites before relying on it.
