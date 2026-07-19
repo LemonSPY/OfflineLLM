@@ -44,7 +44,7 @@ call :banner 4 "Publishing OfflineLLM"
 call "%REPO_ROOT%\tools\workspace-env.cmd"
 if exist "%PUBLISH_DIR%" rmdir /s /q "%PUBLISH_DIR%"
 dotnet publish "%REPO_ROOT%\src\OfflineLlm.App\OfflineLlm.App.csproj" ^
-    -c Release -r win-x64 --self-contained true -p:WindowsPackageType=None ^
+    -c Release -r win-x64 --self-contained true -p:Platform=x64 -p:WindowsPackageType=None ^
     -o "%PUBLISH_DIR%"
 if errorlevel 1 goto :fail
 

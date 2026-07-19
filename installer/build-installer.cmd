@@ -34,7 +34,7 @@ if not exist "%ICON_PATH%" (
 )
 
 echo Publishing OfflineLlm.App ^(%CONFIGURATION%, self-contained win-x64^)...
-dotnet publish "%APP_PROJECT%" -c %CONFIGURATION% -r win-x64 --self-contained true -p:WindowsPackageType=None -o "%PUBLISH_DIR%"
+dotnet publish "%APP_PROJECT%" -c %CONFIGURATION% -r win-x64 --self-contained true -p:Platform=x64 -p:WindowsPackageType=None -o "%PUBLISH_DIR%"
 if errorlevel 1 (
     echo ERROR: dotnet publish failed.
     exit /b 1
