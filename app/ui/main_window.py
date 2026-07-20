@@ -176,19 +176,27 @@ class MainWindow(ctk.CTk):
         if self._selected_model is None:
             messagebox.showerror("OfflineLLM", "Select a model first.")
             return
+        self._mode_label.configure(text="Starting model server...")
         self._run_async(
             lambda: self.controller.start_new_saved_chat(self._selected_model),
             on_done=lambda _session: self._on_chat_opened(ChatMode.SAVED),
+            on_error=self._on_start_chat_error,
         )
 
     def _on_new_offline_chat(self) -> None:
         if self._selected_model is None:
             messagebox.showerror("OfflineLLM", "Select a model first.")
             return
+        self._mode_label.configure(text="Starting model server...")
         self._run_async(
             lambda: self.controller.start_new_offline_chat(self._selected_model),
             on_done=lambda _result: self._on_chat_opened(ChatMode.OFFLINE),
+            on_error=self._on_start_chat_error,
         )
+
+    def _on_start_chat_error(self, exc: Exception) -> None:
+        self._mode_label.configure(text="No chat open")
+        messagebox.showerror("OfflineLLM", str(exc))
 
     def _on_open_saved_chat(self, session_id: str) -> None:
         self._run_async(
@@ -207,7 +215,11 @@ class MainWindow(ctk.CTk):
 
     def _on_send(self) -> None:
         text = self._message_input.get().strip()
-        if not text or self.controller.mode is ChatMode.NONE:
+        if not text:
+            return
+
+        if self.controller.mode is ChatMode.NONE:
+            messagebox.showerror("OfflineLLM", "Start a saved or offline chat first.")
             return
 
         self._message_input.delete(0, "end")
