@@ -24,11 +24,17 @@ class SavedSessionEngine:
         self.session.messages.append(user_chat_message)
         self._store.append_message(self.session.id, user_chat_message)
 
-        assistant_message = ChatMessage(role=ChatRole.ASSISTANT, content="")
-        self.session.messages.append(assistant_message)
-
+        # Stream against history that ends on the user's turn only - an empty
+        # trailing assistant message here would get formatted into the prompt
+        # by the model's chat template as a *closed* empty turn, confusing
+        # the model into generating an incoherent new turn instead of a
+        # continuation. The real assistant message is appended only once we
+        # have its content.
+        reply = ""
         for chunk in chat_engine.stream_reply(self._server, self.session.messages):
-            assistant_message.content += chunk
+            reply += chunk
             yield chunk
 
+        assistant_message = ChatMessage(role=ChatRole.ASSISTANT, content=reply)
+        self.session.messages.append(assistant_message)
         self._store.append_message(self.session.id, assistant_message)
