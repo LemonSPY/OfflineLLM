@@ -256,7 +256,7 @@ class MainWindow(ctk.CTk):
 
     def _show_attach_menu(self, event) -> None:
         menu = tk.Menu(self, tearoff=0)
-        menu.add_command(label="Secure offline chat (no trace)", command=self._on_new_offline_chat)
+        menu.add_command(label="Incognito — 0 trace, RAM/VRAM only", command=self._on_new_offline_chat)
         btn = event.widget
         x = btn.winfo_rootx()
         y = btn.winfo_rooty() - 32
@@ -348,7 +348,7 @@ class MainWindow(ctk.CTk):
 
     def _on_chat_opened(self, mode: ChatMode, session: ChatSession | None = None) -> None:
         if mode is ChatMode.OFFLINE:
-            self._mode_label.configure(text="Offline chat — no trace, closes when you leave")
+            self._mode_label.configure(text="Incognito — 0 trace, RAM/VRAM only, closes when you leave")
             self._render_messages([])
         else:
             self._mode_label.configure(text="Saved chat")

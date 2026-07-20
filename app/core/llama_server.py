@@ -48,21 +48,39 @@ class LlamaServerProcess:
                 f"llama-server.exe not found at {self._exe_path}. Run build/build-llama.cmd first."
             )
 
-        self.port = self._find_free_loopback_port()
-
-        args = [
-            self._exe_path,
+        common_args = [
             "--model", self.model.file_path,
             "--host", "127.0.0.1",
-            "--port", str(self.port),
             "--n-gpu-layers", str(gpu_layers),
             "--ctx-size", str(context_size),
         ]
 
-        # Offline sessions must leave no trace: no request/response logging,
-        # no slot save files.
         if self.kind is ServerLifecycleKind.OFFLINE:
-            args += ["--log-disable", "--no-slot-save-path"]
+            # Offline/incognito sessions must leave no trace: no request/
+            # response logging (slot-to-disk saving is already off unless
+            # --slot-save-path is explicitly given, so nothing extra is
+            # needed for that - there is no "--no-slot-save-path" flag;
+            # passing one made llama-server refuse to start at all).
+            common_args += ["--log-disable"]
+
+            # --mlock pins the model in physical RAM/VRAM so the OS can
+            # never page any of it out to the Windows swap file - "0 trace"
+            # should mean nothing touches disk, not just that we don't
+            # choose to write anything. Locking that much memory isn't
+            # always permitted (depends on the OS's working-set limits for
+            # the process), so fall back to running without it rather than
+            # failing the whole session over a hardening step.
+            try:
+                self._spawn_and_wait(common_args + ["--mlock"], timeout_seconds)
+                return
+            except (RuntimeError, TimeoutError):
+                self._kill_current_process()
+
+        self._spawn_and_wait(common_args, timeout_seconds)
+
+    def _spawn_and_wait(self, extra_args: list[str], timeout_seconds: float) -> None:
+        self.port = self._find_free_loopback_port()
+        args = [self._exe_path, "--port", str(self.port)] + extra_args
 
         creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
         self._process = subprocess.Popen(
@@ -73,6 +91,17 @@ class LlamaServerProcess:
         )
 
         self._wait_for_healthy(timeout_seconds)
+
+    def _kill_current_process(self) -> None:
+        if self._process is None:
+            return
+        try:
+            if self._process.poll() is None:
+                self._process.kill()
+                self._process.wait(timeout=5)
+        except Exception:  # noqa: BLE001 - best-effort cleanup before retrying
+            pass
+        self._process = None
 
     def _wait_for_healthy(self, timeout_seconds: float) -> None:
         deadline = time.monotonic() + timeout_seconds
