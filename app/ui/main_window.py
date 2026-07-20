@@ -13,7 +13,7 @@ from __future__ import annotations
 import os
 import threading
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import filedialog, messagebox
 
 import customtkinter as ctk
 from PIL import Image
@@ -25,6 +25,7 @@ from core.model_manager import ModelInfo
 from .download_dialog import DownloadModelsDialog
 
 _ASSETS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets")
+_MAX_ATTACHMENT_CHARS = 20000
 
 
 class MainWindow(ctk.CTk):
@@ -39,12 +40,17 @@ class MainWindow(ctk.CTk):
         self._show_archived = tk.BooleanVar(value=False)
         self._selected_model: ModelInfo | None = None
         self._sidebar_visible = False
+        self._pending_attachment: tuple[str, str] | None = None
 
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
         self._build_layout()
         self._refresh_models()
         self._refresh_saved_sessions()
+
+        # Land with focus in the input box so the user can start typing
+        # immediately - no need to click anything first.
+        self.after(150, self._message_input.focus_set)
 
     # -- Layout -----------------------------------------------------
 
@@ -80,7 +86,7 @@ class MainWindow(ctk.CTk):
 
     def _build_sidebar(self) -> None:
         self._sidebar = ctk.CTkFrame(self, width=280, fg_color="#f7f7f7", corner_radius=0)
-        self._sidebar.grid_rowconfigure(1, weight=1)
+        self._sidebar.grid_rowconfigure(2, weight=1)
         self._sidebar.grid_propagate(False)
         # Hidden by default (matches the reference layout, which shows only
         # the top-bar icons until the sidebar is explicitly opened).
@@ -89,13 +95,17 @@ class MainWindow(ctk.CTk):
             row=0, column=0, padx=16, pady=(16, 8), sticky="w"
         )
 
+        ctk.CTkButton(self._sidebar, text="Download models...", command=self._on_download_models).grid(
+            row=1, column=0, padx=16, pady=(0, 8), sticky="we"
+        )
+
         self._sessions_frame = ctk.CTkScrollableFrame(self._sidebar, fg_color="transparent")
-        self._sessions_frame.grid(row=1, column=0, padx=8, pady=4, sticky="nswe")
+        self._sessions_frame.grid(row=2, column=0, padx=8, pady=4, sticky="nswe")
 
         ctk.CTkCheckBox(
             self._sidebar, text="Show archived", variable=self._show_archived,
             command=self._refresh_saved_sessions,
-        ).grid(row=2, column=0, padx=16, pady=(4, 16), sticky="w")
+        ).grid(row=3, column=0, padx=16, pady=(4, 16), sticky="w")
 
     def _on_toggle_sidebar(self) -> None:
         self._sidebar_visible = not self._sidebar_visible
@@ -141,8 +151,19 @@ class MainWindow(ctk.CTk):
         wrapper.grid_columnconfigure(0, weight=1)
         wrapper.grid_columnconfigure(2, weight=1)
 
+        # Attachment chip: hidden until a file is attached via the + button.
+        self._attachment_chip = ctk.CTkFrame(wrapper, fg_color="#e8e8e8", corner_radius=14, height=28)
+        self._attachment_label = ctk.CTkLabel(self._attachment_chip, text="", font=ctk.CTkFont(size=12))
+        self._attachment_label.pack(side="left", padx=(12, 4), pady=4)
+        ctk.CTkButton(
+            self._attachment_chip, text="✕", width=20, height=20, corner_radius=10,
+            fg_color="transparent", text_color="black", hover_color="#d0d0d0",
+            command=self._on_clear_attachment,
+        ).pack(side="left", padx=(0, 8), pady=4)
+        # Not gridded yet - shown only while an attachment is pending.
+
         pill = ctk.CTkFrame(wrapper, fg_color="#f2f2f2", corner_radius=26, height=56)
-        pill.grid(row=0, column=1)
+        pill.grid(row=1, column=1)
         pill.grid_propagate(False)
         pill.configure(width=760)
 
@@ -155,18 +176,24 @@ class MainWindow(ctk.CTk):
         self._message_input.place(x=20, y=13)
         self._message_input.bind("<Return>", lambda _e: self._on_send())
 
-        ctk.CTkButton(
+        # "+" attaches a file into the chat context. Right-click reveals the
+        # ephemeral no-trace "secure offline" mode as a small menu above the
+        # button, rather than a permanent second icon.
+        self._attach_button = ctk.CTkButton(
             pill, text="+", width=32, height=32, corner_radius=16, font=icon_font,
             fg_color="white", text_color="black", hover_color="#e2e2e2",
-            command=self._on_download_models,
-        ).place(relx=1.0, x=-220, y=12, anchor="nw")
-
-        self._offline_button = ctk.CTkButton(
-            pill, text="\U0001F310", width=32, height=32, corner_radius=16, font=icon_font,
-            fg_color="white", text_color="black", hover_color="#e2e2e2",
-            command=self._on_new_offline_chat,
+            command=self._on_attach_file,
         )
-        self._offline_button.place(relx=1.0, x=-178, y=12, anchor="nw")
+        self._attach_button.place(relx=1.0, x=-220, y=12, anchor="nw")
+        self._attach_button.bind("<Button-3>", self._show_attach_menu)
+
+        # Web search: not implemented yet (would need an external search
+        # provider) - shown disabled as a placeholder for now.
+        ctk.CTkButton(
+            pill, text="\U0001F310", width=32, height=32, corner_radius=16, font=icon_font,
+            fg_color="white", text_color="black", text_color_disabled="#c2c2c2",
+            hover=False, state="disabled",
+        ).place(relx=1.0, x=-178, y=12, anchor="nw")
 
         self._model_picker = ctk.CTkOptionMenu(
             pill, values=["No models found"], command=self._on_model_selected,
@@ -201,6 +228,39 @@ class MainWindow(ctk.CTk):
 
     def _on_model_selected(self, display_name: str) -> None:
         self._selected_model = self._models_by_name.get(display_name)
+
+    # -- Attachments -----------------------------------------------------
+
+    def _on_attach_file(self) -> None:
+        path = filedialog.askopenfilename(title="Attach a file")
+        if not path:
+            return
+
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                content = f.read()
+        except (UnicodeDecodeError, OSError) as exc:
+            messagebox.showerror("OfflineLLM", f"Couldn't read that file as text: {exc}")
+            return
+
+        if len(content) > _MAX_ATTACHMENT_CHARS:
+            content = content[:_MAX_ATTACHMENT_CHARS] + "\n...[truncated]"
+
+        self._pending_attachment = (os.path.basename(path), content)
+        self._attachment_label.configure(text=f"\U0001F4CE {self._pending_attachment[0]}")
+        self._attachment_chip.grid(row=0, column=1, sticky="w", padx=4, pady=(0, 6))
+
+    def _on_clear_attachment(self) -> None:
+        self._pending_attachment = None
+        self._attachment_chip.grid_remove()
+
+    def _show_attach_menu(self, event) -> None:
+        menu = tk.Menu(self, tearoff=0)
+        menu.add_command(label="Secure offline chat (no trace)", command=self._on_new_offline_chat)
+        btn = event.widget
+        x = btn.winfo_rootx()
+        y = btn.winfo_rooty() - 32
+        menu.tk_popup(x, y)
 
     # -- Saved sessions list -----------------------------------------------------
 
@@ -297,23 +357,60 @@ class MainWindow(ctk.CTk):
 
     def _on_send(self) -> None:
         text = self._message_input.get().strip()
-        if not text:
+        if not text and self._pending_attachment is None:
             return
 
         if self.controller.mode is ChatMode.NONE:
-            messagebox.showerror("OfflineLLM", "Start a saved or offline chat first (✎ or \U0001F310 above).")
+            # No chat open yet: typing and hitting Send just starts a normal
+            # saved chat automatically, rather than making the user click a
+            # separate "new chat" control first.
+            if self._selected_model is None:
+                messagebox.showerror("OfflineLLM", "Download a model first.")
+                return
+            self._message_input.configure(state="disabled")
+            self._send_button.configure(state="disabled")
+            self._mode_label.configure(text="Starting model server...")
+            self._run_async(
+                lambda: self.controller.start_new_saved_chat(self._selected_model),
+                on_done=lambda _s: self._on_autostart_done(text),
+                on_error=self._on_autostart_error,
+            )
             return
+
+        self._send_text(text)
+
+    def _on_autostart_done(self, text: str) -> None:
+        self._message_input.configure(state="normal")
+        self._on_chat_opened(ChatMode.SAVED)
+        self._send_text(text)
+
+    def _on_autostart_error(self, exc: Exception) -> None:
+        self._message_input.configure(state="normal")
+        self._send_button.configure(state="normal")
+        self._on_start_chat_error(exc)
+
+    def _send_text(self, text: str) -> None:
+        attachment = self._pending_attachment
+        self._on_clear_attachment()
+
+        outgoing_text = text
+        display_text = text
+        if attachment is not None:
+            filename, content = attachment
+            outgoing_text = f"Attached file '{filename}':\n```\n{content}\n```\n\n{text}".strip()
+            if not text:
+                display_text = f"[Attached: {filename}]"
 
         self._message_input.delete(0, "end")
         self._show_messages_box()
-        self._append_line(f"You: {text}")
+        self._append_line(f"You: {display_text}")
         self._append_line("Assistant: ", newline=False)
 
         self._send_button.configure(state="disabled")
 
         def worker():
             try:
-                for chunk in self.controller.send_message(text):
+                for chunk in self.controller.send_message(outgoing_text):
                     self.after(0, lambda c=chunk: self._append_text(c))
                 self.after(0, self._on_send_complete)
             except Exception as exc:  # noqa: BLE001 - surfaced to the user
