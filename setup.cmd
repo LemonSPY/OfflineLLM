@@ -58,9 +58,9 @@ call :write_launcher
 if errorlevel 1 goto :fail
 
 call :banner 5 "Creating shortcuts"
-call :make_shortcut "%INSTALL_DIR%\OfflineLLM.cmd" Desktop "%INSTALL_DIR%"
+call :make_shortcut "%INSTALL_DIR%\OfflineLLM.vbs" Desktop "%INSTALL_DIR%"
 if errorlevel 1 goto :fail
-call :make_shortcut "%INSTALL_DIR%\OfflineLLM.cmd" Programs "%INSTALL_DIR%"
+call :make_shortcut "%INSTALL_DIR%\OfflineLLM.vbs" Programs "%INSTALL_DIR%"
 if errorlevel 1 goto :fail
 
 echo.
@@ -71,7 +71,7 @@ echo   Shortcuts    : Desktop and Start Menu
 echo   Your data    : %LocalAppData%\OfflineLlm\chats.db, %LocalAppData%\OfflineLlm\models\
 echo ============================================================
 echo Launching OfflineLLM...
-start "" "%INSTALL_DIR%\OfflineLLM.cmd"
+wscript //nologo "%INSTALL_DIR%\OfflineLLM.vbs"
 exit /b 0
 
 :banner
@@ -81,13 +81,17 @@ echo   [Step %~1/%TOTAL_STEPS%] %~2
 echo ============================================================
 exit /b 0
 
-REM Writes a tiny launcher that runs the app with pythonw.exe (no console
-REM window) using the installed, standalone copy of Python - the installed
-REM app never depends on the repo or tools\ after this point.
+REM Writes a tiny launcher that runs the app with pythonw.exe. This has to be
+REM a .vbs (run via wscript.exe with window style 0), not a .cmd batch file -
+REM a .cmd always opens its own visible console host window, and that window
+REM stays open indefinitely after `start`, defeating the point of using
+REM pythonw.exe (no console) in the first place (confirmed: this happened).
+REM WshShell.Run with the visibility flag set to 0 launches with no window
+REM of any kind.
 :write_launcher
-> "%INSTALL_DIR%\OfflineLLM.cmd" echo @echo off
->>"%INSTALL_DIR%\OfflineLLM.cmd" echo cd /d "%%~dp0app"
->>"%INSTALL_DIR%\OfflineLLM.cmd" echo start "" "%%~dp0python\pythonw.exe" main.py
+> "%INSTALL_DIR%\OfflineLLM.vbs" echo Set oWS = WScript.CreateObject("WScript.Shell")
+>>"%INSTALL_DIR%\OfflineLLM.vbs" echo oWS.CurrentDirectory = "%INSTALL_DIR%\app"
+>>"%INSTALL_DIR%\OfflineLLM.vbs" echo oWS.Run """%INSTALL_DIR%\python\pythonw.exe"" main.py", 0, False
 exit /b 0
 
 :make_shortcut

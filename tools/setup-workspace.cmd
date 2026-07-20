@@ -37,35 +37,85 @@ echo  (nothing is installed system-wide)
 echo ============================================================
 
 REM ---------------------------------------------------------------
-REM Python 3.13, installed per-user into tools\python (no admin needed)
+REM Python 3.13, extracted (not "installed") into tools\python
 REM ---------------------------------------------------------------
 if exist "%TOOLS_DIR%\python\python.exe" (
     echo [python] already present, skipping.
 ) else (
-    echo [python] downloading the Python 3.13 installer...
-    curl -L --fail -o "%DOWNLOAD_DIR%\python-installer.exe" "https://www.python.org/ftp/python/3.13.14/python-3.13.14-amd64.exe"
+    set "PY_VERSION=3.13.14"
+    echo [python] downloading the Python !PY_VERSION! installer...
+    curl -L --fail -o "%DOWNLOAD_DIR%\python-installer.exe" "https://www.python.org/ftp/python/!PY_VERSION!/python-!PY_VERSION!-amd64.exe"
     if errorlevel 1 (
         echo ERROR: failed to download the Python installer.
         exit /b 1
     )
-    echo [python] installing into %TOOLS_DIR%\python ...
-    REM InstallAllUsers=0 + a custom TargetDir installs per-user, unelevated,
-    REM entirely into our own folder - no system-wide registration, no PATH
-    REM changes (PrependPath=0). Include_tcltk=1 so tkinter (used by the app's
-    REM CustomTkinter UI) actually gets installed - the embeddable zip
-    REM distribution doesn't include it, which is why we use the full
-    REM installer in silent mode instead.
-    "%DOWNLOAD_DIR%\python-installer.exe" /quiet InstallAllUsers=0 PrependPath=0 ^
-        Include_launcher=0 Include_test=0 Include_tcltk=1 SimpleInstall=1 ^
-        TargetDir="%TOOLS_DIR%\python"
+
+    REM A normal /quiet InstallAllUsers=0 install silently becomes a no-op if
+    REM this exact Python version+architecture is already installed for the
+    REM current Windows user anywhere else (msiexec treats it as "already
+    REM installed", even with a different TargetDir - confirmed by testing).
+    REM Extracting the installer's constituent MSI packages and running an
+    REM administrative install (msiexec /a, a pure file copy with no
+    REM registration) avoids that entirely and can never conflict with any
+    REM other Python install on the machine.
+    echo [python] extracting installer payload...
+    set "PY_LAYOUT_DIR=%DOWNLOAD_DIR%\py-layout"
+    if exist "!PY_LAYOUT_DIR!" rmdir /s /q "!PY_LAYOUT_DIR!"
+    "%DOWNLOAD_DIR%\python-installer.exe" /layout "!PY_LAYOUT_DIR!" /quiet
     if errorlevel 1 (
-        echo ERROR: Python install failed.
+        echo ERROR: failed to extract the Python installer payload.
         exit /b 1
     )
+
+    REM /layout skips any package Windows already has cached from a prior
+    REM install of the same version - fall back to that cache for anything
+    REM still missing so this also works cleanly on a machine that already
+    REM has this exact Python version installed some other way. The cache
+    REM folder name embeds the version (e.g. "{GUID}v3.13.14150.0"), and
+    REM MUST be filtered on that - a machine with multiple cached Python
+    REM versions will otherwise silently mix in a wrong-version MSI (this
+    REM shipped once already: an unfiltered search grabbed a cached 3.12
+    REM core.msi ahead of 3.13, producing a python.exe that couldn't start
+    REM at all).
+    for %%M in (core.msi exe.msi lib.msi tcltk.msi) do (
+        if not exist "!PY_LAYOUT_DIR!\%%M" (
+            REM dir /s doesn't support a wildcard in a middle path segment, so
+            REM search broadly for %%M and filter matches by version via findstr.
+            for /f "delims=" %%F in ('dir /s /b "%LocalAppData%\Package Cache\%%M" 2^>nul ^| findstr /C:"v!PY_VERSION!" 2^>nul') do (
+                copy /y "%%F" "!PY_LAYOUT_DIR!\%%M" >nul
+            )
+        )
+    )
+
+    echo [python] extracting into %TOOLS_DIR%\python ...
+    mkdir "%TOOLS_DIR%\python" 2>nul
+    for %%M in (core.msi exe.msi lib.msi tcltk.msi) do (
+        if not exist "!PY_LAYOUT_DIR!\%%M" (
+            echo ERROR: could not find %%M after extraction or in the Windows Installer cache.
+            exit /b 1
+        )
+        msiexec /a "!PY_LAYOUT_DIR!\%%M" TARGETDIR="%TOOLS_DIR%\python" /qn
+        if errorlevel 1 (
+            echo ERROR: msiexec /a failed for %%M.
+            exit /b 1
+        )
+    )
+
     if not exist "%TOOLS_DIR%\python\python.exe" (
-        echo ERROR: Python install did not produce %TOOLS_DIR%\python\python.exe
+        echo ERROR: Python extraction did not produce %TOOLS_DIR%\python\python.exe
         exit /b 1
     )
+
+    REM pip.msi's administrative install path doesn't work reliably this way
+    REM (fails with a generic MSI error) - ensurepip bootstraps the same pip
+    REM from a wheel bundled inside the standard library, no MSI needed.
+    echo [python] bootstrapping pip...
+    "%TOOLS_DIR%\python\python.exe" -m ensurepip --upgrade
+    if errorlevel 1 (
+        echo ERROR: ensurepip failed.
+        exit /b 1
+    )
+
     echo [python] installing app dependencies...
     "%TOOLS_DIR%\python\python.exe" -m pip install --no-warn-script-location -r "%TOOLS_DIR%\..\app\requirements.txt"
     if errorlevel 1 (
