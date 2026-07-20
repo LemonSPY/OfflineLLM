@@ -1,14 +1,9 @@
-# .NET / Visual Studio
-bin/
-obj/
-*.user
-.vs/
-*.suo
-
-# WinUI/MSIX packaging output
-AppPackages/
-BundleArtifacts/
-Generated Files/
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
 
 # Native build output
 native/llama.cpp/build/
@@ -16,24 +11,16 @@ native/llama.cpp/build-vulkan/
 
 # llama-server.exe + DLLs (built by build/build-llama.cmd, not committed - the
 # folder itself is tracked via .gitkeep so a fresh clone has somewhere to build into)
-src/OfflineLlm.App/Engine/*
-!src/OfflineLlm.App/Engine/.gitkeep
+app/Engine/*
+!app/Engine/.gitkeep
 
 # Repo-local portable dev toolchain (tools/setup-workspace.cmd downloads these -
 # never commit them, they're multi-hundred-MB and machine-specific)
-tools/dotnet/
+tools/python/
 tools/cmake/
 tools/w64devkit/
 tools/VulkanSDK/
 tools/_downloads/
-
-# Installer publish staging
-installer/publish/
-
-# WiX
-installer/bin/
-installer/obj/
-*.wixpdb
 
 # Models (large binaries, never commit)
 models/

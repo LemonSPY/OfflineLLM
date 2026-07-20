@@ -7,6 +7,8 @@ A native Windows desktop app for running local LLMs on your machine's GPU, with 
 
 Targets laptop iGPU/dGPU setups such as Intel Arc with 16GB of GPU memory, but works on any GPU llama.cpp's Vulkan backend supports.
 
+In the app, click **Download models...** to pull a `.gguf` file straight from Hugging Face (a small curated list is built in, or paste any direct `.gguf` URL) — no manual file wrangling required.
+
 ## Architecture
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full design, including why offline mode is implemented as an in-memory-only session rather than a Docker container (no Docker/WSL2 dependency required).
@@ -14,11 +16,8 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full design, including 
 Layers:
 
 - **`native/llama.cpp`** — vendored inference engine (git submodule), built locally with the Vulkan backend so it runs on Intel Arc GPUs without requiring the Intel oneAPI toolkit. This is the only third-party component; it does the raw GPU matrix/attention math. Everything else in this repo is original code.
-- **`src/OfflineLlm.Core`** — C# class library: manages the `llama-server` child process, model discovery/selection, chat storage (SQLite), and the in-memory-only offline session engine.
-- **`src/OfflineLlm.App`** — WinUI 3 desktop app: chat UI, mode switcher, model picker, saved-chat list with archive/delete.
-- **`installer/`** — WiX Toolset installer producing an MSI that installs the app, adds a Start Menu entry, and creates a desktop shortcut.
-
-In the app, click **Download models...** to pull a `.gguf` file straight from Hugging Face (a small curated list is built in, or paste any direct `.gguf` URL) — no manual file wrangling required.
+- **`app/core`** — Python: manages the `llama-server` child process, model discovery/selection/download, chat storage (SQLite via the standard library), and the in-memory-only offline session engine.
+- **`app/ui`** — CustomTkinter desktop UI: chat window, mode switcher, model picker, saved-chat list with archive/delete.
 
 ## Install (one command)
 
@@ -28,18 +27,17 @@ cd OFFLINELLM
 setup.cmd
 ```
 
-That's the entire install. `setup.cmd` is the single entry point at the repo root and does everything, with a numbered `[Step N/6]` banner before each stage so it's clear what's happening and where it is if something fails:
+That's the entire install. `setup.cmd` is the single entry point at the repo root and does everything, with a numbered `[Step N/5]` banner before each stage so it's clear what's happening and where it is if something fails:
 
 1. Fetches the `native/llama.cpp` submodule
 2. Provisions a portable, repo-local build toolchain into `tools\` (first run only — see below)
 3. Compiles llama.cpp with the Vulkan GPU backend
-4. Publishes the app (self-contained, with the compiled engine bundled in)
-5. Installs it to `%LocalAppData%\OfflineLlm\app`
-6. Creates a **Desktop shortcut** and a **Start Menu entry**, then **launches the app**
+4. Installs a standalone copy of Python + the app + the compiled engine into `%LocalAppData%\OfflineLlm\app` (the installed copy doesn't depend on the repo afterward — you can delete the cloned folder and the installed app keeps working)
+5. Creates a **Desktop shortcut** and a **Start Menu entry**, then **launches the app**
 
-No admin rights needed, nothing is installed system-wide, and nothing outside `tools\` and `%LocalAppData%\OfflineLlm` is touched. Re-running `setup.cmd` is safe — each step skips work that's already done (e.g. it won't re-download the toolchain or recompile llama.cpp from scratch).
+No admin rights needed for the app itself, nothing is installed system-wide, and nothing outside `tools\` and `%LocalAppData%\OfflineLlm` is touched. Re-running `setup.cmd` is safe — each step skips work that's already done (e.g. it won't re-download the toolchain or recompile llama.cpp from scratch).
 
-You do **not** need Visual Studio, a system-wide .NET SDK, CMake, or the Vulkan SDK — step 2 downloads portable copies of all of that (~1-1.5GB, one time) confined to `tools\`. Everything here is a plain `.cmd` batch file, never PowerShell, so nothing hits PowerShell's script execution policy.
+You do **not** need a system-wide Python, Visual Studio, CMake, or the Vulkan SDK — step 2 downloads portable copies of all of that (~1-1.5GB, one time) confined to `tools\`. The only step that needs your one-time approval is a UAC prompt for the Vulkan SDK's installer (its "SDK Core" component unconditionally requires it for one install action — there's no way to script around it, see `tools/setup-workspace.cmd`'s comments). Everything else here is a plain `.cmd` batch file, never PowerShell, so nothing hits PowerShell's script execution policy.
 
 ## Repo layout
 
@@ -48,33 +46,21 @@ setup.cmd                    the one command that builds and installs everything
 native/llama.cpp/            git submodule, vendored inference engine
 tools/                       one-time setup script + repo-local portable toolchain (gitignored)
 build/                       scripts to build llama.cpp with the Vulkan backend
-src/OfflineLlm.Core/         chat storage, process management, offline session engine, model downloads
-src/OfflineLlm.App/          WinUI 3 desktop application
-installer/                   WiX installer project (produces a distributable MSI - optional, see below)
+app/core/                    chat storage, process management, offline session engine, model downloads
+app/ui/                      CustomTkinter desktop UI
+app/main.py                  entry point
 docs/                        architecture notes
 ```
 
-## Building an MSI instead (optional)
+## Manual / advanced setup
 
-`setup.cmd` installs straight to `%LocalAppData%` for you, on this machine. If you instead want a distributable `.msi` to hand to someone else, use the WiX-based installer project after the same first two steps:
+If you'd rather use tools you already have installed system-wide, the build scripts fall back to whatever's on PATH when `tools\` isn't present:
 
 ```cmd
-git clone --recurse-submodules <this repo>
-cd OFFLINELLM
-tools\setup-workspace.cmd         REM one-time, downloads ~1-1.5GB into tools\
-build\build-llama.cmd             REM builds native/llama.cpp with the Vulkan backend
-installer\build-installer.cmd     REM produces installer\bin\OfflineLlm-Setup.msi
+git submodule update --init --recursive
+build\build-llama.cmd             REM needs CMake + Vulkan SDK + a C/C++ compiler on PATH
+python -m pip install -r app\requirements.txt
+python app\main.py
 ```
 
-Running that MSI installs the app under `%LocalAppData%\OfflineLlm`, with the same Start Menu entry and Desktop shortcut.
-
-`tools\setup-workspace.cmd` installs (all repo-local, under `tools\`):
-
-- **.NET 8 SDK** — to build the WinUI 3 app
-- **CMake** + **w64devkit** (a portable GCC + Ninja + Make toolchain) — to build llama.cpp *without* needing Visual Studio at all
-- **Vulkan SDK** — headers + shader compiler needed to build llama.cpp's Vulkan backend (end users don't need this installed — the Vulkan *runtime* they need already ships with their GPU driver)
-- **WiX v4 CLI** — as a local dotnet tool, to build the MSI
-
-If you'd rather use tools you already have installed system-wide (a full Visual Studio, a system .NET SDK, etc.), the build scripts fall back to whatever's on PATH when `tools\` isn't present — skip `setup-workspace.cmd` in that case, and install .NET 8 SDK + Windows App SDK workload, Visual Studio 2022 (C++ workload), CMake, and the Vulkan SDK yourself first.
-
-None of this has been compiled yet — these scripts are written and ready to run but haven't been executed end-to-end. Running `setup.cmd` for the first time is the next step.
+None of this has been compiled/run in this exact form yet in this environment — `setup.cmd` is the tested, known-working path.

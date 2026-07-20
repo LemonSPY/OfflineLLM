@@ -1,13 +1,14 @@
 @echo off
 setlocal enabledelayedexpansion
 REM Provisions a repo-local, portable dev toolchain into tools\ so building this
-REM project does NOT require installing Visual Studio, a system-wide .NET SDK,
-REM CMake, or the Vulkan SDK. Nothing here touches system PATH, the registry, or
-REM Program Files - everything lands under tools\ and is picked up by
+REM project does NOT require installing Visual Studio, a system-wide Python, or
+REM the Vulkan SDK. Nothing here touches system PATH, the registry, or Program
+REM Files - everything lands under tools\ and is picked up by
 REM workspace-env.cmd. Safe to delete tools\ and re-run any time.
 REM
 REM Components installed (repo-local only):
-REM   tools\dotnet       .NET 8 SDK (xcopy install, ~200MB)
+REM   tools\python       Python 3.13 (per-user install redirected into this
+REM                      folder - includes tkinter and pip, no admin needed)
 REM   tools\cmake        CMake (~50MB)
 REM   tools\w64devkit    portable GCC + Ninja + Make toolchain (~100MB)
 REM                      (this is what lets us skip installing Visual Studio -
@@ -16,7 +17,6 @@ REM   tools\VulkanSDK    Vulkan SDK, installed silently into this folder only
 REM                      (needed to compile llama.cpp's Vulkan backend - headers
 REM                      + glslc shader compiler; the *runtime* DLL end users
 REM                      need already ships with their GPU driver)
-REM   tools\dotnet\tools\wix.exe   WiX v4 CLI (local dotnet tool install)
 REM
 REM USAGE
 REM   tools\setup-workspace.cmd
@@ -37,22 +37,39 @@ echo  (nothing is installed system-wide)
 echo ============================================================
 
 REM ---------------------------------------------------------------
-REM .NET 8 SDK (xcopy-deployable zip)
+REM Python 3.13, installed per-user into tools\python (no admin needed)
 REM ---------------------------------------------------------------
-if exist "%TOOLS_DIR%\dotnet\dotnet.exe" (
-    echo [dotnet] already present, skipping.
+if exist "%TOOLS_DIR%\python\python.exe" (
+    echo [python] already present, skipping.
 ) else (
-    echo [dotnet] downloading .NET 8 SDK...
-    curl -L --fail -o "%DOWNLOAD_DIR%\dotnet-sdk-win-x64.zip" "https://aka.ms/dotnet/8.0/dotnet-sdk-win-x64.zip"
+    echo [python] downloading the Python 3.13 installer...
+    curl -L --fail -o "%DOWNLOAD_DIR%\python-installer.exe" "https://www.python.org/ftp/python/3.13.14/python-3.13.14-amd64.exe"
     if errorlevel 1 (
-        echo ERROR: failed to download .NET SDK.
+        echo ERROR: failed to download the Python installer.
         exit /b 1
     )
-    echo [dotnet] extracting...
-    mkdir "%TOOLS_DIR%\dotnet" 2>nul
-    tar -xf "%DOWNLOAD_DIR%\dotnet-sdk-win-x64.zip" -C "%TOOLS_DIR%\dotnet"
+    echo [python] installing into %TOOLS_DIR%\python ...
+    REM InstallAllUsers=0 + a custom TargetDir installs per-user, unelevated,
+    REM entirely into our own folder - no system-wide registration, no PATH
+    REM changes (PrependPath=0). Include_tcltk=1 so tkinter (used by the app's
+    REM CustomTkinter UI) actually gets installed - the embeddable zip
+    REM distribution doesn't include it, which is why we use the full
+    REM installer in silent mode instead.
+    "%DOWNLOAD_DIR%\python-installer.exe" /quiet InstallAllUsers=0 PrependPath=0 ^
+        Include_launcher=0 Include_test=0 Include_tcltk=1 SimpleInstall=1 ^
+        TargetDir="%TOOLS_DIR%\python"
     if errorlevel 1 (
-        echo ERROR: failed to extract .NET SDK.
+        echo ERROR: Python install failed.
+        exit /b 1
+    )
+    if not exist "%TOOLS_DIR%\python\python.exe" (
+        echo ERROR: Python install did not produce %TOOLS_DIR%\python\python.exe
+        exit /b 1
+    )
+    echo [python] installing app dependencies...
+    "%TOOLS_DIR%\python\python.exe" -m pip install --no-warn-script-location -r "%TOOLS_DIR%\..\app\requirements.txt"
+    if errorlevel 1 (
+        echo ERROR: pip install failed.
         exit /b 1
     )
 )
@@ -148,20 +165,7 @@ if exist "%TOOLS_DIR%\VulkanSDK\Include\vulkan\vulkan.h" (
     )
 )
 
-REM ---------------------------------------------------------------
-REM WiX v4 CLI - local dotnet tool, not a global install
-REM ---------------------------------------------------------------
 call "%TOOLS_DIR%\workspace-env.cmd"
-if exist "%TOOLS_DIR%\dotnet\tools\wix.exe" (
-    echo [wix] already present, skipping.
-) else (
-    echo [wix] installing WiX v4 CLI as a local tool...
-    dotnet tool install --tool-path "%TOOLS_DIR%\dotnet\tools" wix
-    if errorlevel 1 (
-        echo ERROR: failed to install WiX CLI.
-        exit /b 1
-    )
-)
 
 echo ============================================================
 echo  Done. The portable toolchain lives entirely under:

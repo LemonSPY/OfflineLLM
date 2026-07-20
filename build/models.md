@@ -1,6 +1,6 @@
 # Adding models
 
-`ModelManager` (see [src/OfflineLlm.Core/Engine/ModelManager.cs](../src/OfflineLlm.Core/Engine/ModelManager.cs)) scans `%LocalAppData%\OfflineLlm\models\` for `.gguf` files and lists whatever it finds in the app's model picker — there's no hardcoded default model.
+`ModelManager` (see [app/core/model_manager.py](../app/core/model_manager.py)) scans `%LocalAppData%\OfflineLlm\models\` for `.gguf` files and lists whatever it finds in the app's model picker — there's no hardcoded default model.
 
 To add a model:
 
@@ -16,4 +16,4 @@ Rule of thumb: leave headroom for the KV-cache on top of the model file's size. 
 - Q4-quantized ~8B parameter models land around 5-6GB — more headroom, useful for longer contexts or running alongside other GPU workloads.
 - Avoid Q4-quantized 30B+ models on a 16GB budget unless using a very short context length — they'll leave little to no room for KV-cache.
 
-`ModelInfo.FileSizeGiB` is surfaced in the picker precisely so this tradeoff is visible before you load a model.
+`ModelInfo.file_size_gib` is surfaced in the picker precisely so this tradeoff is visible before you load a model.

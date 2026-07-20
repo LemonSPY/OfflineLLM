@@ -9,13 +9,8 @@ REM   call "%~dp0..\tools\workspace-env.cmd"
 set "TOOLS_DIR=%~dp0"
 if "%TOOLS_DIR:~-1%"=="\" set "TOOLS_DIR=%TOOLS_DIR:~0,-1%"
 
-if exist "%TOOLS_DIR%\dotnet\dotnet.exe" (
-    set "DOTNET_ROOT=%TOOLS_DIR%\dotnet"
-    set "PATH=%TOOLS_DIR%\dotnet;%PATH%"
-)
-
-if exist "%TOOLS_DIR%\dotnet\tools\wix.exe" (
-    set "PATH=%TOOLS_DIR%\dotnet\tools;%PATH%"
+if exist "%TOOLS_DIR%\python\python.exe" (
+    set "PATH=%TOOLS_DIR%\python;%TOOLS_DIR%\python\Scripts;%PATH%"
 )
 
 if exist "%TOOLS_DIR%\cmake\bin\cmake.exe" (
